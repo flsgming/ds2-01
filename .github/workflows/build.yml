@@ -311,25 +311,46 @@ jobs:
           if os.path.isfile(uepak_path):
               code = open(uepak_path, encoding="utf-8").read()
               if "miao_uepak_movie_none" not in code:
-                  pat = re.compile(
-                      r"^([ \t]*)return\s+b'\.ushaderbytecode\\0'\s+not\s+in\s+d\s+and\s+\("
-                      r"b'\.uexp\\0'\s+in\s+d\s+or\s+\(b'GlobalShaderCache-'\s+in\s+d\s+and\s+inline_in_containers\(path\)\)\)\s*$",
+                  pat_new = re.compile(
+                      r"^([ \t]*)inline\s*=\s*b'\.ushaderbytecode\\0'\s+not\s+in\s+d\s+and\s+\("
+                      r"b'\.uexp\\0'\s+in\s+d\s+or\s+\(b'GlobalShaderCache-'\s+in\s+d\s+and\s+inline_in_containers\(path\)\)\)\s*\n"
+                      r"\1return\s+inline,\s*not\s+inline\s*$",
                       re.M,
                   )
-                  def repl(m):
+                  def repl_new(m):
                       ind = m.group(1)
                       return (
-                          f"{ind}if b'.ushaderbytecode\\0' in d: return False\n"
-                          f"{ind}if b'.uexp\\0' in d: return True\n"
-                          f"{ind}if b'GlobalShaderCache-' in d: return inline_in_containers(path)\n"
-                          f"{ind}return None  # miao_uepak_movie_none: movie/asset-only paks do not hold shader archives"
+                          f"{ind}if b'.ushaderbytecode\\0' in d: return False, True\n"
+                          f"{ind}if b'.uexp\\0' in d: return True, False\n"
+                          f"{ind}if b'GlobalShaderCache-' in d:\n"
+                          f"{ind}    in_c = inline_in_containers(path)\n"
+                          f"{ind}    return in_c, not in_c\n"
+                          f"{ind}return False, False  # miao_uepak_movie_none: movie/asset-only paks hold neither inline shaders nor shader archives"
                       )
-                  new_code, n = pat.subn(repl, code, count=1)
+                  new_code, n = pat_new.subn(repl_new, code, count=1)
                   if n:
                       open(uepak_path, "w", encoding="utf-8").write(new_code)
-                      print("[PATCH] Patched uepak.py inline_shaders() for movie/asset-only paks (6bc30f0)")
+                      print("[PATCH] Patched uepak.py pak_shader_sources() for movie/asset-only paks (6bc30f0)")
                   else:
-                      print("[PATCH WARN] uepak.py inline_shaders() pattern not matched (may already be updated upstream)")
+                      pat_old = re.compile(
+                          r"^([ \t]*)return\s+b'\.ushaderbytecode\\0'\s+not\s+in\s+d\s+and\s+\("
+                          r"b'\.uexp\\0'\s+in\s+d\s+or\s+\(b'GlobalShaderCache-'\s+in\s+d\s+and\s+inline_in_containers\(path\)\)\)\s*$",
+                          re.M,
+                      )
+                      def repl_old(m):
+                          ind = m.group(1)
+                          return (
+                              f"{ind}if b'.ushaderbytecode\\0' in d: return False\n"
+                              f"{ind}if b'.uexp\\0' in d: return True\n"
+                              f"{ind}if b'GlobalShaderCache-' in d: return inline_in_containers(path)\n"
+                              f"{ind}return None  # miao_uepak_movie_none: movie/asset-only paks do not hold shader archives"
+                          )
+                      new_code, n2 = pat_old.subn(repl_old, code, count=1)
+                      if n2:
+                          open(uepak_path, "w", encoding="utf-8").write(new_code)
+                          print("[PATCH] Patched uepak.py inline_shaders() for movie/asset-only paks (6bc30f0)")
+                      else:
+                          print("[PATCH WARN] uepak.py pattern not matched (may already be updated upstream)")
 
           pg_path = "src/dm/games/profile_guess.py"
           if os.path.isfile(pg_path):
